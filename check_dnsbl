@@ -1,0 +1,98 @@
+#!/usr/bin/php
+<?php
+
+error_reporting(E_ERROR | E_PARSE);
+
+define('STATUS_OK', 0);
+define('STATUS_WARNING', 1);
+define('STATUS_CRITICAL', 2);
+define('STATUS_UNKNOWN', 3);
+
+function module_ip_arpa($STR_ADDRESS) {
+        $ARY_RAW = explode(".", $STR_ADDRESS);
+        return "{$ARY_RAW[3]}.{$ARY_RAW[2]}.{$ARY_RAW[1]}.{$ARY_RAW[0]}";
+}
+
+function module_help(){
+	echo "check_dnsbl is used to check an ip address or dns fqdn against different dnsbl providers.
+		-H | IP Address or Domain
+		-p | Performance counter for response time\n";
+}
+
+$ARY_OPTIONS = getopt("H:p:");
+
+if(!(string)$ARY_OPTIONS["H"]){	
+	module_help();
+	exit(STATUS_UNKNOWN);
+}else{
+	$STR_RECORD 	= $ARY_OPTIONS["H"]; 
+}
+if((string)$ARY_OPTIONS["p"]){ $BOOL_PERFDATA = 1; }
+
+
+
+$ARY_DNSBL 	= array("b.barracudacentral.org",
+			"bl.spamcannibal.org",
+			"bl.spamcop.net",
+			"blackholes.five-ten-sg.com",
+			"cbl.abuseat.org",
+			"db.wpbl.info",
+			"dcc1.dcc-servers.net",
+			"dnsbl.inps.de",
+			"dnsbl-1.uceprotect.net",
+			"dnsrbl.swinog.ch",
+			"ix.dnsbl.manitu.net",
+			"l2.apews.org",
+			"no-more-funn.moensted.dk",
+			"pbl.spamhaus.org",
+			"psbl.surriel.com",
+			"spam.dnsbl.sorbs.net",
+			"virbl.dnsbl.bit.nl",
+			"xbl.spamhaus.org",
+			"zen.spamhaus.org");
+
+if($OBJ_CHECK = filter_var($STR_RECORD, FILTER_VALIDATE_IP)) {
+
+}elseif($OBJ_CHECK = filter_var("http://".$STR_RECORD, FILTER_VALIDATE_URL)){
+	if($STR_RECORD = gethostbyname($STR_RECORD)){
+	}else{
+		echo "[ERROR] No FQDN address given";
+		exit(STATUS_CRITICAL);
+	}
+}else{
+	echo "[ERROR] No IP address given";
+	exit(STATUS_CRITICAL);
+}
+
+$OBJ_ARPA = module_ip_arpa($STR_RECORD);
+for($INT_VAR_I = 0; $INT_VAR_I < count($ARY_DNSBL); $INT_VAR_I++){
+	$STR_PROVIDER 	= $ARY_DNSBL[$INT_VAR_I];
+
+	$INT_RUNTIME_BEGIN 	= microtime(true); 
+	$STR_REPUTATION		= gethostbyname("{$OBJ_ARPA}.{$STR_PROVIDER}");
+	$INT_RUNTIME_END  	= microtime(true);
+	$INT_RUNTIME_RESULT	= round(($INT_RUNTIME_END - $INT_RUNTIME_BEGIN) *1000, 0);
+
+	if($STR_REPUTATION == "") {
+        	echo "(UNKNOWN) $STR_PROVIDER\n";
+	}elseif(strpos($STR_REPUTATION,"127.0.0") !== false){
+		echo "(WARNING) $STR_PROVIDER [$STR_REPUTATION] (".$INT_RUNTIME_RESULT."ms)\n";
+		$INT_SCORE++;
+	}else{
+		echo "(OK) $STR_PROVIDER [$STR_REPUTATION] (".$INT_RUNTIME_RESULT."ms)\n";
+	}
+
+	if($BOOL_PERFDATA){
+		$STR_PERFDATA .= str_replace(".","_",$STR_PROVIDER)."=".$INT_RUNTIME_RESULT."ms ";
+	}
+}
+
+if($STR_PERFDATA){ echo "|".$STR_PERFDATA; }
+
+if($INT_SCORE <= 0) {
+        exit(STATUS_OK); 
+} else {
+        exit(STATUS_WARNING);
+}
+?>
+
